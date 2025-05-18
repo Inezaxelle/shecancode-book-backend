@@ -2,10 +2,18 @@ const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
+const dotenv = require('dotenv');
+const connectDB = require('./config/database');
+const Book = require('./models/Book');
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Connect to MongoDB
+connectDB();
 
 // Middleware
 app.use(cors());
@@ -15,79 +23,91 @@ app.use(express.json());
 const swaggerDocument = YAML.load('./swagger.yaml');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// In-memory database
-let books = [];
-
 // Routes
 const apiRouter = express.Router();
 
 // GET all books
-apiRouter.get('/books', (req, res) => {
-  res.json(books);
+apiRouter.get('/books', async (req, res) => {
+  try {
+    const books = await Book.find();
+    res.json(books);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching books' });
+  }
 });
 
 // POST new book
-apiRouter.post('/books', (req, res) => {
-  const { title, author, publishedYear, isbn } = req.body;
-  
-  if (!title || !author) {
-    return res.status(400).json({ error: 'Title and author are required' });
+apiRouter.post('/books', async (req, res) => {
+  try {
+    const { title, author, publishedYear, isbn } = req.body;
+    
+    if (!title || !author) {
+      return res.status(400).json({ error: 'Title and author are required' });
+    }
+
+    const book = new Book({
+      title,
+      author,
+      publishedYear,
+      isbn
+    });
+
+    const savedBook = await book.save();
+    res.status(201).json(savedBook);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-
-  const newBook = {
-    id: uuidv4(),
-    title,
-    author,
-    publishedYear,
-    isbn
-  };
-
-  books.push(newBook);
-  res.status(201).json(newBook);
 });
 
 // GET book by ID
-apiRouter.get('/books/:id', (req, res) => {
-  const book = books.find(b => b.id === req.params.id);
-  if (!book) {
-    return res.status(404).json({ error: 'Book not found' });
+apiRouter.get('/books/:id', async (req, res) => {
+  try {
+    const book = await Book.findById(req.params.id);
+    if (!book) {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+    res.json(book);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching book' });
   }
-  res.json(book);
 });
 
 // PUT update book
-apiRouter.put('/books/:id', (req, res) => {
-  const { title, author, publishedYear, isbn } = req.body;
-  
-  if (!title || !author) {
-    return res.status(400).json({ error: 'Title and author are required' });
+apiRouter.put('/books/:id', async (req, res) => {
+  try {
+    const { title, author, publishedYear, isbn } = req.body;
+    
+    if (!title || !author) {
+      return res.status(400).json({ error: 'Title and author are required' });
+    }
+
+    const book = await Book.findByIdAndUpdate(
+      req.params.id,
+      { title, author, publishedYear, isbn },
+      { new: true, runValidators: true }
+    );
+
+    if (!book) {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+
+    res.json(book);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-
-  const index = books.findIndex(b => b.id === req.params.id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Book not found' });
-  }
-
-  books[index] = {
-    ...books[index],
-    title,
-    author,
-    publishedYear,
-    isbn
-  };
-
-  res.json(books[index]);
 });
 
 // DELETE book
-apiRouter.delete('/books/:id', (req, res) => {
-  const index = books.findIndex(b => b.id === req.params.id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Book not found' });
+apiRouter.delete('/books/:id', async (req, res) => {
+  try {
+    const book = await Book.findByIdAndDelete(req.params.id);
+    if (!book) {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: 'Error deleting book' });
   }
-
-  books.splice(index, 1);
-  res.status(204).send();
 });
 
 // Mount API router
