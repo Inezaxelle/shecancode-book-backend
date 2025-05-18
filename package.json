@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "RESTful API for managing books",
   "main": "index.js",
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
